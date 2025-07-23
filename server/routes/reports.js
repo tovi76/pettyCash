@@ -2,7 +2,8 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const { query, validationResult } = require('express-validator');
 const { getOne, getMany, execute } = require('../config/database');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
+const requireRole = require('../middleware/auth').requireRole;
 const path = require('path');
 const fs = require('fs').promises;
 
