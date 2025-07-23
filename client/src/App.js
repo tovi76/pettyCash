@@ -42,7 +42,7 @@ function AppContent() {
       <Routes>
         <Route 
           path="/" 
-          element={user ? <Navigate to="/dashboard" replace /> : <HomePage />} 
+          element={user ? <Navigate to="/dashboard" replace /> : <Layout showCopyright><HomePage /></Layout>} 
         />
         
         <Route 

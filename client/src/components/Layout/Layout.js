@@ -18,7 +18,7 @@ import {
   Person
 } from '@mui/icons-material';
 
-const Layout = ({ children }) => {
+const Layout = ({ children, showCopyright = false }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -74,9 +74,26 @@ const Layout = ({ children }) => {
         </Toolbar>
       </AppBar>
       
-      <Container component="main" sx={{ flexGrow: 1, py: 3 }}>
+      <Container component="main" sx={{ mt: 4, mb: 4, flexGrow: 1 }}>
         {children}
       </Container>
+      {showCopyright && (
+        <Box sx={{ 
+          py: 2,
+          textAlign: 'center',
+          bgcolor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          position: 'fixed',
+          bottom: 0,
+          width: '100%',
+          zIndex: 1
+        }}>
+          <Typography variant="body2" color="text.secondary">
+            כל הזכויות שמורות 2025 | אילה בלוך, טובי קוט
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 };
