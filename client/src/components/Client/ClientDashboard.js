@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -30,7 +30,11 @@ import {
   Divider,
   IconButton,
   Avatar,
-  Snackbar
+  Snackbar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon
 } from '@mui/material';
 import {
   AccountBalanceWallet,
@@ -45,43 +49,67 @@ import {
   Pending,
   Delete,
   Visibility,
-  PhotoCamera
+  PhotoCamera,
+  RequestQuote,
+  Assessment,
+  Person,
+  Timeline,
+  BarChart,
+  Edit,
+  GetApp
 } from '@mui/icons-material';
-import { transactionsAPI, categoriesAPI } from '../../services/api'; // Import real API
+import { transactionsAPI, categoriesAPI } from '../../services/api';
 
 const ClientDashboard = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const [uploadDialog, setUploadDialog] = useState(false);
+  const [specialRequestDialog, setSpecialRequestDialog] = useState(false);
+  const [personalReportDialog, setPersonalReportDialog] = useState(false);
+  const [personalDetailsDialog, setPersonalDetailsDialog] = useState(false);
+  const [historyDialog, setHistoryDialog] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
   const [ocrProcessing, setOcrProcessing] = useState(false);
   const [ocrResult, setOcrResult] = useState(null);
+  const [currentTransactionId, setCurrentTransactionId] = useState(null);
   const [expenseForm, setExpenseForm] = useState({
     amount: '',
     category: '',
     description: '',
     date: new Date().toISOString().split('T')[0]
   });
-  const [currentTransactionId, setCurrentTransactionId] = useState(null);
+  const [specialRequestForm, setSpecialRequestForm] = useState({
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    description: ''
+  });
+  const [personalDetails, setPersonalDetails] = useState({
+    firstName: 'יוסי',
+    lastName: 'כהן',
+    email: 'yossi@company.com',
+    phone: '050-1234567',
+    address: 'רחוב הרצל 123, תל אביב',
+    birthDate: '1990-01-01'
+  });
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'info'
   });
 
-  // Mock data
-  const userStats = {
+  // State for user data
+  const [userStats, setUserStats] = useState({
     currentBalance: 1250,
     monthlyExpenses: 420,
     pendingReimbursements: 180,
     totalSaved: 2340
-  };
+  });
 
-  const recentExpenses = [
+  const [recentExpenses, setRecentExpenses] = useState([
     { id: 1, description: 'ארוחת צהריים', amount: 45, category: 'אוכל', date: '2024-01-20', status: 'approved', receipt: true },
     { id: 2, description: 'נסיעה בתחבורה ציבורית', amount: 12, category: 'תחבורה', date: '2024-01-19', status: 'pending', receipt: true },
     { id: 3, description: 'ציוד משרדי', amount: 85, category: 'ציוד', date: '2024-01-18', status: 'approved', receipt: true },
     { id: 4, description: 'חניה', amount: 15, category: 'תחבורה', date: '2024-01-17', status: 'pending', receipt: false },
-  ];
+  ]);
 
   const categories = [
     'אוכל',
@@ -154,13 +182,14 @@ const ClientDashboard = () => {
     const file = event.target.files[0];
     if (file) {
       setReceiptFile(file);
+      setOcrProcessing(true);
       
       try {
-        // First create a transaction to get an ID
+        // יצירת transaction חדשה קודם כל
         const transactionData = {
           amount: 0,
           description: 'ממתין לעיבוד קבלה...',
-          category_id: 1, // Default category
+          category_id: 1, // קטגוריה ברירת מחדל
           transaction_date: new Date().toISOString().split('T')[0],
           status: 'pending'
         };
@@ -169,23 +198,57 @@ const ClientDashboard = () => {
         
         if (createResult.success) {
           const transactionId = createResult.data.id;
+          setCurrentTransactionId(transactionId);
           
-          // Upload receipt file
+          // העלאת קובץ הקבלה
           await transactionsAPI.uploadReceipt(transactionId, file);
           
-          // Process OCR
-          await processReceiptOCR(file, transactionId);
+          // עיבוד OCR אמיתי
+          const ocrResult = await transactionsAPI.processOCR(transactionId);
           
-          // Store transaction ID for later use
-          setCurrentTransactionId(transactionId);
+          if (ocrResult.success) {
+            const ocrData = ocrResult.data;
+            
+            setOcrResult({
+              merchantName: ocrData.storeName,
+              amount: ocrData.amount,
+              date: ocrData.date,
+              items: ocrData.items || [],
+              confidence: ocrData.confidence,
+              category: ocrData.category
+            });
+            
+            // עדכון הטופס עם נתוני OCR
+            setExpenseForm({
+              amount: ocrData.amount.toString(),
+              description: `קנייה ב${ocrData.storeName}`,
+              date: ocrData.date,
+              category: ocrData.category
+            });
+            
+            setSnackbar({
+              open: true,
+              message: `OCR הושלם בהצלחה! דיוק: ${(ocrData.confidence * 100).toFixed(1)}%`,
+              severity: 'success'
+            });
+          } else {
+            throw new Error(ocrResult.message || 'OCR processing failed');
+          }
+        } else {
+          throw new Error(createResult.message || 'Failed to create transaction');
         }
       } catch (error) {
-        console.error('File upload error:', error);
+        console.error('OCR Error:', error);
         setSnackbar({
           open: true,
-          message: 'שגיאה בהעלאת הקבלה: ' + (error.response?.data?.message || error.message),
+          message: 'שגיאה בעיבוד הקבלה: ' + (error.response?.data?.message || error.message),
           severity: 'error'
         });
+        
+        // במקרה של שגיאה, אפשר מילוי ידני
+        setOcrResult(null);
+      } finally {
+        setOcrProcessing(false);
       }
     }
   };
@@ -197,29 +260,102 @@ const ClientDashboard = () => {
     });
   };
 
+  const handleViewExpense = (expense) => {
+    setSnackbar({
+      open: true,
+      message: `צפייה בהוצאה: ${expense.description} - ₪${expense.amount}`,
+      severity: 'info'
+    });
+    // כאן ניתן להוסיף דיאלוג מפורט לצפייה בהוצאה
+  };
+
+  const handleDeleteExpense = (expenseId) => {
+    setRecentExpenses(prevExpenses => 
+      prevExpenses.filter(expense => expense.id !== expenseId)
+    );
+    
+    // עדכון הסטטיסטיקות
+    const deletedExpense = recentExpenses.find(expense => expense.id === expenseId);
+    if (deletedExpense) {
+      setUserStats(prevStats => ({
+        ...prevStats,
+        monthlyExpenses: prevStats.monthlyExpenses - deletedExpense.amount,
+        currentBalance: prevStats.currentBalance + deletedExpense.amount
+      }));
+    }
+    
+    setSnackbar({
+      open: true,
+      message: 'ההוצאה נמחקה בהצלחה',
+      severity: 'success'
+    });
+  };
+
   const handleSubmitExpense = async () => {
+    if (!currentTransactionId) {
+      setSnackbar({
+        open: true,
+        message: 'שגיאה: לא נמצא ID של העסקה',
+        severity: 'error'
+      });
+      return;
+    }
+
     try {
-      // Update transaction with form data
-      const updateResult = await transactionsAPI.update(currentTransactionId, expenseForm);
+      // עדכון ה-transaction הקיים עם הנתונים המעודכנים
+      const updateData = {
+        amount: parseFloat(expenseForm.amount),
+        description: expenseForm.description,
+        category: expenseForm.category,
+        transaction_date: expenseForm.date,
+        status: 'pending'
+      };
+      
+      const updateResult = await transactionsAPI.update(currentTransactionId, updateData);
       
       if (updateResult.success) {
-        // Show success message
+        // יצירת אובייקט להצגה ברשימה
+        const newExpense = {
+          id: currentTransactionId,
+          description: expenseForm.description,
+          amount: parseFloat(expenseForm.amount),
+          category: expenseForm.category,
+          date: expenseForm.date,
+          status: 'pending',
+          receipt: true
+        };
+        
+        // הוספת ההוצאה לראש הרשימה
+        setRecentExpenses(prevExpenses => [newExpense, ...prevExpenses]);
+        
+        // עדכון הסטטיסטיקות
+        setUserStats(prevStats => ({
+          ...prevStats,
+          monthlyExpenses: prevStats.monthlyExpenses + newExpense.amount,
+          currentBalance: prevStats.currentBalance - newExpense.amount
+        }));
+        
+        // הצגת הודעת הצלחה
         setSnackbar({
           open: true,
-          message: 'הוצאה נשמרה בהצלחה!',
+          message: 'הוצאה נשמרה בהצלחה ונוספה להוצאות שלך!',
           severity: 'success'
         });
         
-        // Reset form and dialog
+        // איפוס הטופס והדיאלוג
         setUploadDialog(false);
         setReceiptFile(null);
         setOcrResult(null);
+        setCurrentTransactionId(null);
         setExpenseForm({
           amount: '',
           category: '',
           description: '',
           date: new Date().toISOString().split('T')[0]
         });
+        
+        // מעבר לטאב "ההוצאות שלי" כדי שהמשתמש יראה את ההוצאה החדשה
+        setCurrentTab(0);
       } else {
         throw new Error(updateResult.message || 'Failed to update transaction');
       }
@@ -282,9 +418,9 @@ const ClientDashboard = () => {
         נהל את ההוצאות שלך בצורה חכמה ויעילה
       </Typography>
 
-      {/* Statistics Cards */}
+      {/* מלבנים עליונים - סטטיסטיקות */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={4}>
           <StatCard
             title="היתרה שלי"
             value={userStats.currentBalance}
@@ -293,7 +429,7 @@ const ClientDashboard = () => {
             subtitle="זמין לשימוש"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={4}>
           <StatCard
             title="הוצאות החודש"
             value={userStats.monthlyExpenses}
@@ -302,37 +438,28 @@ const ClientDashboard = () => {
             subtitle="מתוך התקציב החודשי"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={4}>
           <StatCard
-            title="החזרים ממתינים"
+            title="בקשות שממתינות לאישור"
             value={userStats.pendingReimbursements}
             icon={<Pending />}
             color="warning"
             subtitle="בבדיקה"
           />
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <StatCard
-            title="סה״כ חסכתי"
-            value={userStats.totalSaved}
-            icon={<CheckCircle />}
-            color="success"
-            subtitle="השנה"
-          />
-        </Grid>
       </Grid>
 
-      {/* Quick Actions */}
+      {/* מלבנים אמצעיים - פעולות מהירות */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%', cursor: 'pointer', '&:hover': { boxShadow: 4 } }}>
             <CardContent sx={{ textAlign: 'center', p: 3 }}>
               <CloudUpload sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
               <Typography variant="h6" gutterBottom>
                 העלה קבלה
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                צלם או העלה קבלה לסריקה אוטומטית
+                צלם או העלה קבלה עם אפשרות לעריכת סכום, קטגוריה ותאריך
               </Typography>
               <Button
                 variant="contained"
@@ -346,48 +473,108 @@ const ClientDashboard = () => {
           </Card>
         </Grid>
         <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%', cursor: 'pointer', '&:hover': { boxShadow: 4 } }}>
             <CardContent sx={{ textAlign: 'center', p: 3 }}>
-              <AttachMoney sx={{ fontSize: 48, color: 'secondary.main', mb: 2 }} />
+              <RequestQuote sx={{ fontSize: 48, color: 'secondary.main', mb: 2 }} />
               <Typography variant="h6" gutterBottom>
-                בקש כסף
+                בקשה להוצאה מיוחדת
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                בקש תוספת לקופה הקטנה שלך
+                הגש בקשה להוצאה מיוחדת עם סכום, תאריך ומהות ההוצאה
               </Typography>
               <Button
-                variant="outlined"
+                variant="contained"
                 color="secondary"
+                startIcon={<Edit />}
+                onClick={() => setSpecialRequestDialog(true)}
                 fullWidth
               >
-                בקש תוספת כסף
+                הגש בקשה
               </Button>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
+          <Card sx={{ height: '100%', cursor: 'pointer', '&:hover': { boxShadow: 4 } }}>
             <CardContent sx={{ textAlign: 'center', p: 3 }}>
-              <Analytics sx={{ fontSize: 48, color: 'info.main', mb: 2 }} />
+              <Assessment sx={{ fontSize: 48, color: 'info.main', mb: 2 }} />
               <Typography variant="h6" gutterBottom>
                 דוח אישי
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                הורד דוח מפורט של ההוצאות שלך
+                צפה בדוחות קודמים והפק דוח באקסל
               </Typography>
               <Button
-                variant="outlined"
+                variant="contained"
                 color="info"
+                startIcon={<GetApp />}
+                onClick={() => setPersonalReportDialog(true)}
                 fullWidth
               >
-                הורד דוח
+                צפה בדוחות
               </Button>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Tabs */}
+      {/* אפשרויות תחתונות */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }} onClick={() => setCurrentTab(0)}>
+            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+              <Receipt sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
+              <Typography variant="h6" gutterBottom>
+                ההוצאות שלי
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                צפייה בהוצאות אחרונות
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }} onClick={() => setPersonalDetailsDialog(true)}>
+            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+              <Person sx={{ fontSize: 40, color: 'secondary.main', mb: 1 }} />
+              <Typography variant="h6" gutterBottom>
+                עדכון פרטים אישיים
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                שם, משפחה, כתובת, מייל, טלפון
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }} onClick={() => setHistoryDialog(true)}>
+            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+              <Timeline sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
+              <Typography variant="h6" gutterBottom>
+                הסטוריה
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                צפייה בהוצאות מחודשים קודמים
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card sx={{ cursor: 'pointer', '&:hover': { boxShadow: 3 } }} onClick={() => setCurrentTab(2)}>
+            <CardContent sx={{ textAlign: 'center', p: 2 }}>
+              <BarChart sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
+              <Typography variant="h6" gutterBottom>
+                סטטיסטיקות
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                נתונים סטטיסטיים וגרפים
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* תוכן דינמי */}
       <Paper sx={{ width: '100%' }}>
         <Tabs
           value={currentTab}
@@ -395,6 +582,7 @@ const ClientDashboard = () => {
           indicatorColor="primary"
           textColor="primary"
           variant="fullWidth"
+          sx={{ display: 'none' }} // מוסתר את הטאבים כי אנחנו משתמשים בכרטיסים
         >
           <Tab label="ההוצאות שלי" />
           <Tab label="היסטוריה" />
@@ -415,8 +603,6 @@ const ClientDashboard = () => {
                     <TableCell>סכום</TableCell>
                     <TableCell>קטגוריה</TableCell>
                     <TableCell>תאריך</TableCell>
-                    <TableCell>סטטוס</TableCell>
-                    <TableCell>קבלה</TableCell>
                     <TableCell>פעולות</TableCell>
                   </TableRow>
                 </TableHead>
@@ -428,29 +614,21 @@ const ClientDashboard = () => {
                       <TableCell>{expense.category}</TableCell>
                       <TableCell>{expense.date}</TableCell>
                       <TableCell>
-                        <Chip
-                          label={expense.status === 'approved' ? 'אושר' : 'ממתין'}
-                          color={expense.status === 'approved' ? 'success' : 'warning'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={expense.receipt ? 'יש' : 'אין'}
-                          color={expense.receipt ? 'success' : 'error'}
-                          size="small"
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <IconButton size="small">
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleViewExpense(expense)}
+                          title="צפייה בפרטי ההוצאה"
+                        >
                           <Visibility />
                         </IconButton>
-                        {expense.status === 'pending' && (
-                          <IconButton size="small">
-                            <Delete />
-                          </IconButton>
-                        )}
+                        <IconButton 
+                          size="small" 
+                          onClick={() => handleDeleteExpense(expense.id)}
+                          title="מחיקת ההוצאה"
+                          color="error"
+                        >
+                          <Delete />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -514,7 +692,7 @@ const ClientDashboard = () => {
               >
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,application/pdf,.pdf"
                   onChange={handleFileUpload}
                   style={{ display: 'none' }}
                 />
@@ -630,6 +808,299 @@ const ClientDashboard = () => {
               שמור הוצאה
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* דיאלוג בקשה להוצאה מיוחדת */}
+      <Dialog open={specialRequestDialog} onClose={() => setSpecialRequestDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          בקשה להוצאה מיוחדת
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="סכום"
+                  type="number"
+                  value={specialRequestForm.amount}
+                  onChange={(e) => setSpecialRequestForm({...specialRequestForm, amount: e.target.value})}
+                  InputProps={{
+                    startAdornment: <Typography sx={{ mr: 1 }}>₪</Typography>
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="תאריך"
+                  type="date"
+                  value={specialRequestForm.date}
+                  onChange={(e) => setSpecialRequestForm({...specialRequestForm, date: e.target.value})}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="מהות ההוצאה"
+                  multiline
+                  rows={4}
+                  value={specialRequestForm.description}
+                  onChange={(e) => setSpecialRequestForm({...specialRequestForm, description: e.target.value})}
+                  placeholder="פרט את מהות ההוצאה המיוחדת והסיבה לבקשה"
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSpecialRequestDialog(false)}>
+            ביטול
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              // כאן יהיה הלוגיקה לשליחת הבקשה
+              setSnackbar({
+                open: true,
+                message: 'בקשתך נשלחה בהצלחה וממתינה לאישור',
+                severity: 'success'
+              });
+              setSpecialRequestDialog(false);
+              setSpecialRequestForm({ amount: '', date: new Date().toISOString().split('T')[0], description: '' });
+            }}
+          >
+            שלח בקשה
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* דיאלוג דוח אישי */}
+      <Dialog open={personalReportDialog} onClose={() => setPersonalReportDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          דוחות אישיים
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              דוחות קודמים
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemIcon>
+                  <GetApp color="primary" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="דוח חודש ינואר 2024" 
+                  secondary="סה״כ הוצאות: ₪420" 
+                />
+                <Button size="small" startIcon={<GetApp />}>
+                  הורד
+                </Button>
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <GetApp color="primary" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="דוח חודש דצמבר 2023" 
+                  secondary="סה״כ הוצאות: ₪380" 
+                />
+                <Button size="small" startIcon={<GetApp />}>
+                  הורד
+                </Button>
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <GetApp color="primary" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="דוח חודש נובמבר 2023" 
+                  secondary="סה״כ הוצאות: ₪295" 
+                />
+                <Button size="small" startIcon={<GetApp />}>
+                  הורד
+                </Button>
+              </ListItem>
+            </List>
+            <Divider sx={{ my: 2 }} />
+            <Button 
+              variant="contained" 
+              startIcon={<GetApp />} 
+              fullWidth
+              onClick={() => {
+                setSnackbar({
+                  open: true,
+                  message: 'דוח חודשי נוצר והורד בהצלחה',
+                  severity: 'success'
+                });
+              }}
+            >
+              הפק דוח חודשי חדש (אקסל)
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPersonalReportDialog(false)}>
+            סגור
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* דיאלוג עדכון פרטים אישיים */}
+      <Dialog open={personalDetailsDialog} onClose={() => setPersonalDetailsDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          עדכון פרטים אישיים
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="שם פרטי"
+                  value={personalDetails.firstName}
+                  onChange={(e) => setPersonalDetails({...personalDetails, firstName: e.target.value})}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="שם משפחה"
+                  value={personalDetails.lastName}
+                  onChange={(e) => setPersonalDetails({...personalDetails, lastName: e.target.value})}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="כתובת מייל"
+                  type="email"
+                  value={personalDetails.email}
+                  onChange={(e) => setPersonalDetails({...personalDetails, email: e.target.value})}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="מספר טלפון"
+                  value={personalDetails.phone}
+                  onChange={(e) => setPersonalDetails({...personalDetails, phone: e.target.value})}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="תאריך לידה"
+                  type="date"
+                  value={personalDetails.birthDate}
+                  onChange={(e) => setPersonalDetails({...personalDetails, birthDate: e.target.value})}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="כתובת"
+                  multiline
+                  rows={2}
+                  value={personalDetails.address}
+                  onChange={(e) => setPersonalDetails({...personalDetails, address: e.target.value})}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPersonalDetailsDialog(false)}>
+            ביטול
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              setSnackbar({
+                open: true,
+                message: 'פרטים אישיים עודכנו בהצלחה',
+                severity: 'success'
+              });
+              setPersonalDetailsDialog(false);
+            }}
+          >
+            שמור
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* דיאלוג הסטוריה */}
+      <Dialog open={historyDialog} onClose={() => setHistoryDialog(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>
+          הסטוריית הוצאות
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              הוצאות מחודשים קודמים
+            </Typography>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>חודש</TableCell>
+                    <TableCell>סה״כ הוצאות</TableCell>
+                    <TableCell>מספר עסקאות</TableCell>
+                    <TableCell>קטגוריה עיקרית</TableCell>
+                    <TableCell>פעולות</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>ינואר 2024</TableCell>
+                    <TableCell>₪420</TableCell>
+                    <TableCell>12</TableCell>
+                    <TableCell>אוכל</TableCell>
+                    <TableCell>
+                      <Button size="small" startIcon={<Visibility />}>
+                        צפה
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>דצמבר 2023</TableCell>
+                    <TableCell>₪380</TableCell>
+                    <TableCell>9</TableCell>
+                    <TableCell>תחבורה</TableCell>
+                    <TableCell>
+                      <Button size="small" startIcon={<Visibility />}>
+                        צפה
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>נובמבר 2023</TableCell>
+                    <TableCell>₪295</TableCell>
+                    <TableCell>7</TableCell>
+                    <TableCell>ציוד משרדי</TableCell>
+                    <TableCell>
+                      <Button size="small" startIcon={<Visibility />}>
+                        צפה
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHistoryDialog(false)}>
+            סגור
+          </Button>
         </DialogActions>
       </Dialog>
 

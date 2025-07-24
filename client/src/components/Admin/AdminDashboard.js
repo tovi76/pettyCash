@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -37,8 +37,10 @@ import {
   Edit,
   Delete,
   Visibility,
-  Analytics
+  Analytics,
+  GetApp
 } from '@mui/icons-material';
+import { usersAPI } from '../../services/api';
 
 // פונקציה לייצוא לאקסל עם תמיכה משופרת בעברית
 const exportToExcel = (data, filename) => {
@@ -80,8 +82,6 @@ const exportToExcel = (data, filename) => {
 
 const AdminDashboard = () => {
   const [currentTab, setCurrentTab] = useState(0);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [dialogType, setDialogType] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [filters, setFilters] = useState({
     employee: '',
@@ -89,13 +89,191 @@ const AdminDashboard = () => {
     date: ''
   });
   const [filteredTransactions, setFilteredTransactions] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showAddUserDialog, setShowAddUserDialog] = useState(false);
+  const [showEditUserDialog, setShowEditUserDialog] = useState(false);
+  const [newUserData, setNewUserData] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    monthly_budget: 0
+  });
+  const [editUserData, setEditUserData] = useState({
+    email: '',
+    password: '',
+    full_name: '',
+    monthly_budget: 0
+  });
 
-  const users = [
-    { id: 1, name: 'יוסי כהן', username: 'yossi', monthlyBudget: 1500, currentSpent: 420, status: 'active' },
-    { id: 2, name: 'שרה לוי', username: 'sara', monthlyBudget: 1200, currentSpent: 680, status: 'active' },
-    { id: 3, name: 'דוד מזרחי', username: 'david', monthlyBudget: 2000, currentSpent: 1250, status: 'active' },
-    { id: 4, name: 'מיכל אברהם', username: 'michal', monthlyBudget: 1000, currentSpent: 200, status: 'active' },
-  ];
+  // טעינת משתמשים מהשרת
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    try {
+      console.log('🔄 Loading users...');
+      setLoading(true);
+      setError(null);
+      const response = await usersAPI.getAll();
+      console.log('📊 Users API response:', response);
+      if (response.success) {
+        console.log('✅ Users loaded successfully:', response.data.length, 'users');
+        setUsers(response.data);
+      } else {
+        console.error('❌ Users API failed:', response.message);
+        setError('שגיאה בטעינת רשימת המשתמשים');
+      }
+    } catch (error) {
+      console.error('❌ Error loading users:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      setError('שגיאה בחיבור לשרת');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddUser = async () => {
+    try {
+      // Check if user is authenticated
+      const token = localStorage.getItem('authToken');
+      console.log('🔐 Auth token exists:', !!token);
+      if (!token) {
+        console.error('❌ No auth token found!');
+        alert('אין טוקן אימות. אנא התחבר מחדש.');
+        return;
+      }
+      console.log('➕ Adding new user:', newUserData);
+      setLoading(true);
+      const response = await usersAPI.create(newUserData);
+      console.log('📋 Add user API response:', response);
+      if (response.success) {
+        console.log('✅ User added successfully, refreshing list...');
+        // רענון רשימת המשתמשים
+        await loadUsers();
+        setShowAddUserDialog(false);
+        setNewUserData({
+          email: '',
+          password: '',
+          full_name: '',
+          monthly_budget: 0
+        });
+        alert('משתמש נוסף בהצלחה!');
+      } else {
+        console.error('❌ Add user failed:', response.message);
+        alert(response.message || 'שגיאה בהוספת המשתמש');
+      }
+    } catch (error) {
+      console.error('❌ Error adding user:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      console.error('Error status:', error.response?.status);
+      
+      // Display specific error message from server
+      let errorMessage = 'שגיאה בחיבור לשרת';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 400) {
+        errorMessage = 'נתונים שגויים או חסרים';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'אין הרשאה לביצוע פעולה זו';
+      } else if (error.response?.status === 409) {
+        errorMessage = 'משתמש כבר קיים במערכת';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (window.confirm('האם אתה בטוח שברצונך למחוק את המשתמש?')) {
+      try {
+        console.log('🗑️ Deleting user with ID:', userId);
+        setLoading(true);
+        const response = await usersAPI.delete(userId);
+        console.log('📋 Delete user API response:', response);
+        if (response.success) {
+          console.log('✅ User deleted successfully, refreshing list...');
+          await loadUsers();
+          alert('המשתמש נמחק בהצלחה!');
+        } else {
+          console.error('❌ Delete user failed:', response.message);
+          alert(response.message || 'שגיאה במחיקת המשתמש');
+        }
+      } catch (error) {
+        console.error('❌ Error deleting user:', error);
+        console.error('Error details:', error.response?.data || error.message);
+        console.error('Error status:', error.response?.status);
+        alert('שגיאה בחיבור לשרת');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleEditUser = async () => {
+    try {
+      if (!selectedUser) {
+        alert('לא נבחר משתמש לעריכה');
+        return;
+      }
+      
+      console.log('✏️ Editing user:', selectedUser.id, editUserData);
+      setLoading(true);
+      
+      // Prepare update data - only include password if it's not empty
+      const updateData = {
+        full_name: editUserData.full_name,
+        email: editUserData.email,
+        monthly_budget: editUserData.monthly_budget
+      };
+      
+      if (editUserData.password && editUserData.password.trim() !== '') {
+        updateData.password = editUserData.password;
+      }
+      
+      const response = await usersAPI.update(selectedUser.id, updateData);
+      console.log('📋 Edit user API response:', response);
+      
+      if (response.success) {
+        console.log('✅ User updated successfully, refreshing list...');
+        await loadUsers();
+        setShowEditUserDialog(false);
+        setSelectedUser(null);
+        setEditUserData({
+          email: '',
+          password: '',
+          full_name: '',
+          monthly_budget: 0
+        });
+        alert('המשתמש עודכן בהצלחה!');
+      } else {
+        console.error('❌ Edit user failed:', response.message);
+        alert(response.message || 'שגיאה בעדכון המשתמש');
+      }
+    } catch (error) {
+      console.error('❌ Error editing user:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      
+      let errorMessage = 'שגיאה בחיבור לשרת';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.status === 400) {
+        errorMessage = 'נתונים שגויים או חסרים';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'אין הרשאה לביצוע פעולה זו';
+      } else if (error.response?.status === 409) {
+        errorMessage = 'כתובת מייל כבר קיימת במערכת';
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const budgetRequests = [
     { 
@@ -130,19 +308,7 @@ const AdminDashboard = () => {
     },
   ];
 
-  // חישוב דינמי של יתרת הקופה הכוללת
-  const totalBudgets = users.reduce((sum, user) => sum + user.monthlyBudget, 0);
-  const totalSpent = users.reduce((sum, user) => sum + user.currentSpent, 0);
-  const totalCashBalance = totalBudgets - totalSpent; // יתרת קופה = סך תקציבים - סך הוצאות
-
-  // Mock data
-  const dashboardStats = {
-    totalCashBalance: totalCashBalance, // יתרת קופה כוללת - הסכום הכולל של יתרות התקציבים החודשיים
-    monthlyExpenses: totalSpent, // הוצאות החודש - הסכום של כל הקבלות שהועלו על ידי העובדים
-    usersWithReceipts: users.filter(user => user.currentSpent > 0).length, // משתמשים - כמות העובדים שהעלו החודש קבלות
-    pendingRequests: budgetRequests.filter(req => req.status === 'pending').length // בקשות - כמות הבקשות לאישור הוצאה מיוחדת שלא טופלו
-  };
-
+  // Mock data for recent transactions - must be defined before budget calculations
   const recentTransactions = [
     { id: 1, user: 'יוסי כהן', amount: 250, category: 'אוכל', date: '2024-01-20', status: 'approved' },
     { id: 2, user: 'שרה לוי', amount: 180, category: 'תחבורה', date: '2024-01-19', status: 'pending' },
@@ -150,6 +316,25 @@ const AdminDashboard = () => {
     { id: 4, user: 'מיכל אברהם', amount: 150, category: 'אוכל', date: '2024-01-17', status: 'approved' },
     { id: 5, user: 'יוסי כהן', amount: 90, category: 'תחבורה', date: '2024-01-16', status: 'approved' },
   ];
+
+  // חישוב דינמי של יתרת הקופה הכוללת
+  // סכום כל התקציבים החודשיים = יתרת הקופה הכוללת בתחילת החודש
+  const totalMonthlyBudgets = users.reduce((sum, user) => sum + (user.monthly_budget || 0), 0);
+  
+  // חישוב הוצאות החודש מתוך הקבלות שהועלו (מתוך recentTransactions)
+  const monthlyExpensesFromReceipts = recentTransactions
+    .filter(transaction => transaction.status === 'approved')
+    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  
+  // יתרת הקופה = סך התקציבים החודשיים - סך הקבלות שהועלו
+  const totalCashBalance = totalMonthlyBudgets - monthlyExpensesFromReceipts;
+
+  const dashboardStats = {
+    totalCashBalance: totalCashBalance, // יתרת קופה כוללת - התקציבים החודשיים פחות הקבלות שהועלו
+    monthlyExpenses: monthlyExpensesFromReceipts, // הוצאות החודש - סכום כל הקבלות המאושרות
+    usersWithReceipts: new Set(recentTransactions.filter(t => t.status === 'approved').map(t => t.user)).size, // משתמשים ייחודיים שהעלו קבלות מאושרות
+    pendingRequests: budgetRequests.filter(req => req.status === 'pending').length // בקשות - כמות הבקשות לאישור הוצאה מיוחדת שלא טופלו
+  };
 
   // פונקציה להחלת סינון
   const applyFilters = () => {
@@ -185,16 +370,6 @@ const AdminDashboard = () => {
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
-  };
-
-  const handleOpenDialog = (type) => {
-    setDialogType(type);
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setDialogType('');
   };
 
   const StatCard = ({ title, value, icon, color, change }) => (
@@ -424,70 +599,97 @@ const AdminDashboard = () => {
               <Button
                 variant="contained"
                 startIcon={<Add />}
-                onClick={() => handleOpenDialog('user')}
+                onClick={() => {
+                  // איפוס השדות לפני פתיחת הדיאלוג
+                  setNewUserData({
+                    email: '',
+                    password: '',
+                    full_name: '',
+                    monthly_budget: 0
+                  });
+                  setShowAddUserDialog(true);
+                }}
+                disabled={loading}
               >
                 הוסף משתמש
               </Button>
             </Box>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>שם העובד</TableCell>
-                    <TableCell>שם משתמש</TableCell>
-                    <TableCell>תקציב חודשי</TableCell>
-                    <TableCell>יתרה</TableCell>
-                    <TableCell>פעולות</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {users.map((user) => {
-                    const remainingBudget = user.monthlyBudget - user.currentSpent;
-                    const isOverBudget = remainingBudget < 0;
-                    
-                    return (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.name}</TableCell>
-                        <TableCell>{user.username}</TableCell>
-                        <TableCell>₪{user.monthlyBudget.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <Typography 
-                            color={isOverBudget ? 'error' : 'success.main'}
-                            fontWeight={isOverBudget ? 'bold' : 'normal'}
-                          >
-                            ₪{Math.abs(remainingBudget).toLocaleString()}
-                            {isOverBudget && ' (חריגה)'}
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                <Typography>טוען משתמשים...</Typography>
+              </Box>
+            ) : error ? (
+              <Box sx={{ p: 3, textAlign: 'center' }}>
+                <Typography color="error">{error}</Typography>
+                <Button onClick={loadUsers} sx={{ mt: 2 }}>נסה שוב</Button>
+              </Box>
+            ) : (
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>שם מלא</TableCell>
+                      <TableCell>כתובת מייל</TableCell>
+                      <TableCell>תקציב חודשי</TableCell>
+                      <TableCell>פעולות</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} sx={{ textAlign: 'center', p: 3 }}>
+                          <Typography color="text.secondary">
+                            אין משתמשים במערכת. לחץ על "הוסף משתמש" כדי להוסיף משתמש ראשון.
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <IconButton 
-                            size="small" 
-                            onClick={() => {
-                              setSelectedUser(user);
-                              handleOpenDialog('editUser');
-                            }}
-                            title="עריכת משתמש"
-                          >
-                            <Edit />
-                          </IconButton>
-                          <IconButton 
-                            size="small" 
-                            onClick={() => {
-                              setSelectedUser(user);
-                              handleOpenDialog('deleteUser');
-                            }}
-                            title="מחיקת משתמש"
-                            color="error"
-                          >
-                            <Delete />
-                          </IconButton>
-                        </TableCell>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                    ) : (
+                      users.map((user) => {
+                        return (
+                          <TableRow key={user.id}>
+                            <TableCell>{user.full_name}</TableCell>
+                            <TableCell>{user.email}</TableCell>
+                            <TableCell>
+                              <Typography color="primary">
+                                ₪{(user.monthly_budget || 0).toLocaleString()}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <IconButton 
+                                size="small" 
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setEditUserData({
+                                    full_name: user.full_name || '',
+                                    email: user.email || '',
+                                    password: '',
+                                    monthly_budget: user.monthly_budget || 0
+                                  });
+                                  setShowEditUserDialog(true);
+                                }}
+                                title="עריכת משתמש"
+                                disabled={loading}
+                              >
+                                <Edit />
+                              </IconButton>
+                              <IconButton 
+                                size="small" 
+                                onClick={() => handleDeleteUser(user.id)}
+                                title="מחיקת משתמש"
+                                color="error"
+                                disabled={loading || user.role === 'admin'}
+                              >
+                                <Delete />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
           </Box>
         </TabPanel>
 
@@ -601,7 +803,7 @@ const AdminDashboard = () => {
                     </Typography>
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" color="primary">
-                        סה"כ הוצאות החודש: ₪{totalSpent.toLocaleString()}
+                        סה"כ הוצאות החודש: ₪{monthlyExpensesFromReceipts.toLocaleString()}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         מספר עסקאות: {recentTransactions.length} | עובדים פעילים: {users.filter(user => user.status === 'active').length}
@@ -671,130 +873,142 @@ const AdminDashboard = () => {
         </TabPanel>
       </Paper>
 
-      {/* Dialog for adding new items */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {dialogType === 'user' ? 'הוסף עובד חדש' : 
-           dialogType === 'editUser' ? 'עריכת עובד' :
-           dialogType === 'deleteUser' ? 'מחיקת עובד' :
-           'הוסף עסקה חדשה'}
-        </DialogTitle>
+
+
+      {/* Add User Dialog */}
+      <Dialog open={showAddUserDialog} onClose={() => setShowAddUserDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>הוסף משתמש חדש</DialogTitle>
         <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            {dialogType === 'user' ? (
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="שם העובד" 
-                    placeholder="הכנס שם מלא"
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="שם משתמש" 
-                    placeholder="הכנס שם משתמש להתחברות"
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="סיסמה" 
-                    type="password"
-                    placeholder="הכנס סיסמה למשתמש"
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="תקציב חודשי (₪)" 
-                    type="number"
-                    placeholder="1000"
-                    required
-                    InputProps={{
-                      startAdornment: '₪'
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            ) : dialogType === 'editUser' ? (
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="שם העובד" 
-                    defaultValue={selectedUser?.name || ''}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="שם משתמש" 
-                    defaultValue={selectedUser?.username || ''}
-                    required
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="סיסמה חדשה" 
-                    type="password"
-                    placeholder="השאר ריק לשמירת סיסמה נוכחית"
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField 
-                    fullWidth 
-                    label="תקציב חודשי (₪)" 
-                    type="number"
-                    defaultValue={selectedUser?.monthlyBudget || ''}
-                    required
-                    InputProps={{
-                      startAdornment: '₪'
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            ) : dialogType === 'deleteUser' ? (
-              <Box>
-                <Typography variant="body1" sx={{ mb: 2 }}>
-                  האם אתה בטוח שברצונך למחוק את העובד?
-                </Typography>
-                <Typography variant="h6" color="error" sx={{ mb: 1 }}>
-                  {selectedUser?.name || 'משתמש לא נבחר'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  פעולה זו לא ניתנת לביטול ותמחק את כל הנתונים הקשורים לעובד.
-                </Typography>
-              </Box>
-            ) : (
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <TextField fullWidth label="תיאור העסקה" />
-                </Grid>
-                <Grid item xs={6}>
-                  <TextField fullWidth label="סכום" type="number" />
-                </Grid>
-                <Grid item xs={6}>
-                  <TextField fullWidth label="קטגוריה" />
-                </Grid>
-              </Grid>
-            )}
-          </Box>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="שם מלא"
+                value={newUserData.full_name}
+                onChange={(e) => setNewUserData({...newUserData, full_name: e.target.value})}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="כתובת מייל"
+                type="email"
+                value={newUserData.email}
+                onChange={(e) => setNewUserData({...newUserData, email: e.target.value})}
+                required
+                helperText="כתובת המייל חייבת להיות ייחודית"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="סיסמה"
+                type="password"
+                value={newUserData.password}
+                onChange={(e) => setNewUserData({...newUserData, password: e.target.value})}
+                required
+                helperText="הסיסמה חייבת להיות ייחודית לכל עובד"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="תקציב חודשי (₪)"
+                type="number"
+                value={newUserData.monthly_budget}
+                onChange={(e) => setNewUserData({...newUserData, monthly_budget: parseFloat(e.target.value) || 0})}
+                required
+                InputProps={{
+                  startAdornment: '₪'
+                }}
+              />
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>ביטול</Button>
+          <Button onClick={() => {
+            setShowAddUserDialog(false);
+            // איפוס השדות כשלוחצים על בטל
+            setNewUserData({
+              email: '',
+              password: '',
+              full_name: '',
+              monthly_budget: 0
+            });
+          }} disabled={loading}>
+            בטל
+          </Button>
           <Button 
+            onClick={handleAddUser} 
             variant="contained" 
-            onClick={handleCloseDialog}
-            color={dialogType === 'deleteUser' ? 'error' : 'primary'}
+            disabled={loading || !newUserData.full_name || !newUserData.email || !newUserData.password || newUserData.monthly_budget <= 0}
           >
-            {dialogType === 'deleteUser' ? 'מחק עובד' : 'שמור'}
+            {loading ? 'מוסיף...' : 'הוסף משתמש'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={showEditUserDialog} onClose={() => setShowEditUserDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>עריכת משתמש</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="שם מלא"
+                value={editUserData.full_name}
+                onChange={(e) => setEditUserData({...editUserData, full_name: e.target.value})}
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="כתובת מייל"
+                type="email"
+                value={editUserData.email}
+                onChange={(e) => setEditUserData({...editUserData, email: e.target.value})}
+                required
+                helperText="כתובת המייל חייבת להיות ייחודית"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="סיסמה חדשה"
+                type="password"
+                value={editUserData.password}
+                onChange={(e) => setEditUserData({...editUserData, password: e.target.value})}
+                helperText="השאר ריק לשמירת הסיסמה הנוכחית"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="תקציב חודשי (₪)"
+                type="number"
+                value={editUserData.monthly_budget}
+                onChange={(e) => setEditUserData({...editUserData, monthly_budget: parseFloat(e.target.value) || 0})}
+                required
+                InputProps={{
+                  startAdornment: '₪'
+                }}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowEditUserDialog(false)} disabled={loading}>
+            בטל
+          </Button>
+          <Button 
+            onClick={handleEditUser} 
+            variant="contained" 
+            disabled={loading || !editUserData.full_name || !editUserData.email || !editUserData.monthly_budget}
+          >
+            {loading ? 'מעדכן...' : 'עדכן משתמש'}
           </Button>
         </DialogActions>
       </Dialog>

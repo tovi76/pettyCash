@@ -42,19 +42,29 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      // TODO: Implement actual login API call
-      // For demo purposes, simulate login
-      const userData = { id: 1, username, role: username === 'admin' ? 'admin' : 'client' };
-      const token = 'demo-token-' + Date.now();
+      // Import authAPI here to avoid circular dependency
+      const { authAPI } = await import('../services/api');
       
-      // Store in localStorage
-      localStorage.setItem('authToken', token);
-      localStorage.setItem('userData', JSON.stringify(userData));
+      const response = await authAPI.login(username, password);
       
-      setUser(userData);
-      return { success: true };
+      if (response.success) {
+        const { token, user } = response.data;
+        
+        // Store in localStorage
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('userData', JSON.stringify(user));
+        
+        setUser(user);
+        return { success: true };
+      } else {
+        return { success: false, message: response.message || 'שגיאה בהתחברות' };
+      }
     } catch (error) {
-      return { success: false, message: 'שגיאה בהתחברות' };
+      console.error('Login error:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'שגיאה בהתחברות לשרת' 
+      };
     }
   };
 

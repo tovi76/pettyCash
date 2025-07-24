@@ -24,14 +24,11 @@ import {
 const Register = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    fullName: '',
+    companyName: '',
     username: '',
     email: '',
     password: '',
-    confirmPassword: '',
-    role: 'client',
-    department: '',
-    employeeId: ''
+    confirmPassword: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -133,11 +130,11 @@ const Register = () => {
                       <TextField
                         required
                         fullWidth
-                        id="fullName"
-                        label="שם מלא"
-                        name="fullName"
-                        autoComplete="name"
-                        value={formData.fullName}
+                        id="companyName"
+                        label="שם החברה"
+                        name="companyName"
+                        autoComplete="organization"
+                        value={formData.companyName}
                         onChange={handleChange}
                       />
                     </Grid>
@@ -188,42 +185,6 @@ const Register = () => {
                         type="password"
                         id="confirmPassword"
                         value={formData.confirmPassword}
-                        onChange={handleChange}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <FormControl fullWidth>
-                        <InputLabel id="role-label">תפקיד</InputLabel>
-                        <Select
-                          labelId="role-label"
-                          id="role"
-                          name="role"
-                          value={formData.role}
-                          label="תפקיד"
-                          onChange={handleChange}
-                        >
-                          <MenuItem value="client">עובד</MenuItem>
-                          <MenuItem value="admin">מנהל</MenuItem>
-                        </Select>
-                      </FormControl>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        fullWidth
-                        id="department"
-                        label="מחלקה"
-                        name="department"
-                        value={formData.department}
-                        onChange={handleChange}
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        fullWidth
-                        id="employeeId"
-                        label="מספר עובד"
-                        name="employeeId"
-                        value={formData.employeeId}
                         onChange={handleChange}
                       />
                     </Grid>

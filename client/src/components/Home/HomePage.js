@@ -32,11 +32,6 @@ const HomePage = () => {
       description: 'סריקה אוטומטית של קבלות באמצעות OCR מתקדם'
     },
     {
-      icon: <Analytics sx={{ fontSize: 40, color: 'secondary.main' }} />,
-      title: 'חישוב אופטימלי',
-      description: 'אלגוריתם חכם לחלוקה אופטימלית של הוצאות'
-    },
-    {
       icon: <AccountBalance sx={{ fontSize: 40, color: 'info.main' }} />,
       title: 'ניהול קופה מתקדם',
       description: 'מעקב מלא אחר תזרים מזומנים ויתרות'
@@ -104,13 +99,13 @@ const HomePage = () => {
         <Container maxWidth="lg">
           <Grid container spacing={4} alignItems="center">
             <Grid item xs={12} md={6}>
-              <Typography variant="h1" gutterBottom>
+              <Typography variant="h1" gutterBottom sx={{ color: 'white' }}>
                 ניהול קופה קטנה
                 <br />
                 <span style={{ color: '#4CAF50' }}>חכם ומתקדם</span>
               </Typography>
-              <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
-                פתרון מקצועי לניהול הוצאות, סריקת קבלות אוטומטית וחישוב אופטימלי של החזרים
+              <Typography variant="h5" sx={{ mb: 4, opacity: 0.9, color: 'white' }}>
+                פתרון מקצועי לניהול הוצאות, סריקת קבלות אוטומטית והפקת דוחות אקסל
               </Typography>
               <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
                 <Chip 
@@ -119,10 +114,6 @@ const HomePage = () => {
                 />
                 <Chip 
                   label="דוחות אקסל" 
-                  sx={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
-                />
-                <Chip 
-                  label="חישוב אופטימלי" 
                   sx={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', color: 'white' }}
                 />
               </Stack>
@@ -139,7 +130,7 @@ const HomePage = () => {
                     }
                   }}
                 >
-                  התחל עכשיו
+                  הרשמה
                 </Button>
                 <Button
                   variant="outlined"
@@ -283,7 +274,7 @@ const HomePage = () => {
           </Grid>
           <Box mt={4} pt={4} borderTop={1} borderColor="grey.700">
             <Typography variant="body2" color="grey.400" align="center">
-              © 2024 מערכת ניהול קופה קטנה. כל הזכויות שמורות.
+              © 2024 כל הזכויות שמורות אילה בלוך, טובי קוט
             </Typography>
           </Box>
         </Container>

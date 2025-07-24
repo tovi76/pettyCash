@@ -16,21 +16,36 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('authToken');
+    console.log('🔑 API Request:', config.method?.toUpperCase(), config.url);
+    console.log('🎫 Auth token exists:', !!token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('✅ Token added to request');
+    } else {
+      console.warn('⚠️ No auth token found in localStorage');
     }
     return config;
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ API Response:', response.config.method?.toUpperCase(), response.config.url, 'Status:', response.status);
+    return response;
+  },
   (error) => {
+    console.error('❌ API Error:', error.config?.method?.toUpperCase(), error.config?.url);
+    console.error('Error status:', error.response?.status);
+    console.error('Error message:', error.response?.data?.message || error.message);
+    console.error('Full error:', error);
+    
     if (error.response?.status === 401) {
+      console.warn('🚫 Token expired or invalid, redirecting to login');
       // Token expired or invalid
       localStorage.removeItem('authToken');
       localStorage.removeItem('userData');
@@ -179,12 +194,46 @@ export const reportsAPI = {
   }
 };
 
+// Users API calls
+export const usersAPI = {
+  getAll: async () => {
+    const response = await api.get('/users');
+    return response.data;
+  },
+
+  getById: async (id) => {
+    const response = await api.get(`/users/${id}`);
+    return response.data;
+  },
+
+  create: async (userData) => {
+    const response = await api.post('/users', userData);
+    return response.data;
+  },
+
+  update: async (id, userData) => {
+    const response = await api.put(`/users/${id}`, userData);
+    return response.data;
+  },
+
+  delete: async (id) => {
+    const response = await api.delete(`/users/${id}`);
+    return response.data;
+  },
+
+  getStats: async (id) => {
+    const response = await api.get(`/users/${id}/stats`);
+    return response.data;
+  }
+};
+
 // Combined API for easy import
 export const API = {
   auth: authAPI,
   transactions: transactionsAPI,
   categories: categoriesAPI,
-  reports: reportsAPI
+  reports: reportsAPI,
+  users: usersAPI
 };
 
 export default api;
