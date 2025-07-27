@@ -10,15 +10,11 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
         const query = `
             SELECT 
                 id,
-                username,
                 email,
                 full_name,
-                employee_id,
-                department,
-                role,
+                monthly_budget,
                 is_active,
                 created_at,
-                last_login,
                 (
                     SELECT COALESCE(SUM(amount), 0) 
                     FROM transactions 
@@ -104,11 +100,11 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
 router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     try {
         console.log('📝 Create user request received:', req.body);
-        const { username, email, password, full_name, employee_id, department, role = 'client' } = req.body;
+        const { email, password, full_name, monthly_budget = 0 } = req.body;
         
         // Validate required fields
         console.log('🔍 Validating required fields...');
-        if (!username || !email || !password || !full_name || !employee_id || !department) {
+        if (!email || !password || !full_name || monthly_budget <= 0) {
             console.log('❌ Validation failed - missing required fields');
             return res.status(400).json({
                 success: false,
@@ -118,12 +114,12 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         console.log('✅ All required fields present');
         
         
-        // Check if username or email already exists
+        // Check if email already exists
         console.log('🔍 Checking for existing users...');
-        const checkQuery = 'SELECT id FROM users WHERE username = ? OR email = ? OR employee_id = ?';
+        const checkQuery = 'SELECT id FROM users WHERE email = ?';
         console.log('📊 Executing query:', checkQuery);
-        console.log('📊 Query params:', [username, email, employee_id]);
-        const existingResult = await executeQuery(checkQuery, [username, email, employee_id]);
+        console.log('📊 Query params:', [email]);
+        const existingResult = await executeQuery(checkQuery, [email]);
         console.log('📊 Query result:', existingResult);
         if (!existingResult.success) {
             console.log('❌ Database query failed:', existingResult.error);
@@ -136,7 +132,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
             console.log('❌ User already exists, returning 400 error');
             return res.status(400).json({
                 success: false,
-                message: 'שם משתמש, אימייל או מספר עובד כבר קיימים במערכת'
+                message: 'אימייל כבר קיים במערכת'
             });
         }
         
@@ -146,12 +142,12 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         
         // Insert new user
         const insertQuery = `
-            INSERT INTO users (username, email, password_hash, full_name, employee_id, department, role, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+            INSERT INTO users (email, password_hash, full_name, monthly_budget, is_active)
+            VALUES (?, ?, ?, ?, TRUE)
         `;
         
         const insertResult = await executeQuery(insertQuery, [
-            username, email, password_hash, full_name, employee_id, department, role
+            email, password_hash, full_name, monthly_budget
         ]);
         if (!insertResult.success) {
             throw new Error(insertResult.error);
@@ -159,7 +155,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         
         // Get the created user
         const newUserResult = await getOne(
-            'SELECT id, username, email, full_name, employee_id, department, role, is_active, created_at FROM users WHERE id = ?',
+            'SELECT id, email, full_name, monthly_budget, is_active, created_at FROM users WHERE id = ?',
             [insertResult.data.insertId]
         );
         if (!newUserResult.success) {
@@ -186,27 +182,25 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { username, email, full_name, employee_id, department, role, is_active } = req.body;
+        const { email, full_name, monthly_budget, is_active, password } = req.body;
         
         // Check if user exists
         const existingUserResult = await getOne('SELECT id FROM users WHERE id = ?', [id]);
         if (!existingUserResult.success) {
-            return res.status(404).json({
-                success: false,
-                message: 'משתמש לא נמצא'
-            });
+            throw new Error(existingUserResult.error);
         }
-        const existingUser = existingUserResult.data ? [existingUserResult.data] : [];
-        if (existingUser.length === 0) {
+        const existingUser = existingUserResult.data;
+        
+        if (!existingUser) {
             return res.status(404).json({
                 success: false,
                 message: 'משתמש לא נמצא'
             });
         }
         
-        // Check for duplicate username, email, or employee_id (excluding current user)
-        const checkQuery = 'SELECT id FROM users WHERE (username = ? OR email = ? OR employee_id = ?) AND id != ?';
-        const duplicatesResult = await executeQuery(checkQuery, [username, email, employee_id, id]);
+        // Check for duplicate email (excluding current user)
+        const checkQuery = 'SELECT id FROM users WHERE email = ? AND id != ?';
+        const duplicatesResult = await executeQuery(checkQuery, [email, id]);
         if (!duplicatesResult.success) {
             throw new Error(duplicatesResult.error);
         }
@@ -215,27 +209,38 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
         if (duplicates.length > 0) {
             return res.status(400).json({
                 success: false,
-                message: 'שם משתמש, אימייל או מספר עובד כבר קיימים במערכת'
+                message: 'אימייל כבר קיים במערכת'
             });
         }
         
         // Update user
-        const updateQuery = `
+        let updateQuery = `
             UPDATE users 
-            SET username = ?, email = ?, full_name = ?, employee_id = ?, department = ?, role = ?, is_active = ?
+            SET email = ?, full_name = ?, monthly_budget = ?, is_active = ?
             WHERE id = ?
         `;
+        let updateParams = [email, full_name, monthly_budget, is_active, id];
         
-        const updateResult = await executeQuery(updateQuery, [
-            username, email, full_name, employee_id, department, role, is_active, id
-        ]);
+        // If password is provided, include it in the update
+        if (password && password.trim() !== '') {
+            const saltRounds = 10;
+            const password_hash = await bcrypt.hash(password, saltRounds);
+            updateQuery = `
+                UPDATE users 
+                SET email = ?, full_name = ?, monthly_budget = ?, is_active = ?, password_hash = ?
+                WHERE id = ?
+            `;
+            updateParams = [email, full_name, monthly_budget, is_active, password_hash, id];
+        }
+        
+        const updateResult = await executeQuery(updateQuery, updateParams);
         if (!updateResult.success) {
             throw new Error(updateResult.error);
         }
         
         // Get updated user
         const updatedUserResult = await getOne(
-            'SELECT id, username, email, full_name, employee_id, department, role, is_active, created_at FROM users WHERE id = ?',
+            'SELECT id, email, full_name, monthly_budget, is_active, created_at FROM users WHERE id = ?',
             [id]
         );
         if (!updatedUserResult.success) {

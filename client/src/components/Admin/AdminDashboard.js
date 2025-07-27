@@ -368,6 +368,21 @@ const AdminDashboard = () => {
     }
   }, []);
 
+  const handleCancelAddUser = () => {
+    console.log('🚫 Canceling add user dialog');
+    setShowAddUserDialog(false);
+    // איפוס השדות אחרי סגירת הדיאלוג
+    setTimeout(() => {
+      setNewUserData({
+        email: '',
+        password: '',
+        full_name: '',
+        monthly_budget: 0
+      });
+      console.log('✨ Form fields reset');
+    }, 100);
+  };
+
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
   };
@@ -898,6 +913,10 @@ const AdminDashboard = () => {
                 onChange={(e) => setNewUserData({...newUserData, email: e.target.value})}
                 required
                 helperText="כתובת המייל חייבת להיות ייחודית"
+                autoComplete="new-email"
+                inputProps={{
+                  autoComplete: 'new-email'
+                }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -909,6 +928,10 @@ const AdminDashboard = () => {
                 onChange={(e) => setNewUserData({...newUserData, password: e.target.value})}
                 required
                 helperText="הסיסמה חייבת להיות ייחודית לכל עובד"
+                autoComplete="new-password"
+                inputProps={{
+                  autoComplete: 'new-password'
+                }}
               />
             </Grid>
             <Grid item xs={12}>
@@ -927,22 +950,13 @@ const AdminDashboard = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            setShowAddUserDialog(false);
-            // איפוס השדות כשלוחצים על בטל
-            setNewUserData({
-              email: '',
-              password: '',
-              full_name: '',
-              monthly_budget: 0
-            });
-          }} disabled={loading}>
+          <Button onClick={handleCancelAddUser} disabled={loading}>
             בטל
           </Button>
           <Button 
             onClick={handleAddUser} 
             variant="contained" 
-            disabled={loading || !newUserData.full_name || !newUserData.email || !newUserData.password || newUserData.monthly_budget <= 0}
+            disabled={loading || !newUserData.full_name?.trim() || !newUserData.email?.trim() || !newUserData.password?.trim() || newUserData.monthly_budget <= 0}
           >
             {loading ? 'מוסיף...' : 'הוסף משתמש'}
           </Button>
