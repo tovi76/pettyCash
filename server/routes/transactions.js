@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { body, validationResult, query } = require('express-validator');
-const { getOne, getMany, execute } = require('../config/database');
+const { getOne, getMany, executeQuery, insert } = require('../config/database');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const ocrService = require('../services/ocrService'); // Import real OCR service
 
@@ -79,7 +79,15 @@ router.get('/', authenticateToken, [
   query('start_date').optional().isISO8601().withMessage('תאריך התחלה לא תקין'),
   query('end_date').optional().isISO8601().withMessage('תאריך סיום לא תקין')
 ], async (req, res) => {
+  console.log('🚀 === TRANSACTIONS GET ROUTE STARTED ===');
+  console.log('👤 User from token:', req.user);
+  console.log('🔍 Raw query params:', req.query);
+  console.log('📋 Request headers:', req.headers.authorization ? 'Token present' : 'No token');
+  
   try {
+    console.log('📊 GET transactions request');
+    console.log('👤 User:', req.user?.id, req.user?.email);
+    console.log('🔍 Query params:', req.query);
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -99,7 +107,7 @@ router.get('/', authenticateToken, [
     // Filter by user role
     if (req.user.role === 'client') {
       whereClause += ' AND t.user_id = ?';
-      queryParams.push(req.user.id);
+      queryParams.push(parseInt(req.user.id));
     }
 
     // Apply filters
@@ -110,7 +118,7 @@ router.get('/', authenticateToken, [
 
     if (req.query.category_id) {
       whereClause += ' AND t.category_id = ?';
-      queryParams.push(req.query.category_id);
+      queryParams.push(parseInt(req.query.category_id));
     }
 
     if (req.query.start_date) {
@@ -135,9 +143,9 @@ router.get('/', authenticateToken, [
         t.status,
         t.created_at,
         t.updated_at,
-        u.username,
+        u.email,
         u.full_name,
-        u.department,
+        u.monthly_budget,
         c.name as category_name,
         c.color as category_color
       FROM transactions t
@@ -150,12 +158,20 @@ router.get('/', authenticateToken, [
 
     queryParams.push(limit, offset);
 
+    console.log('💾 Executing transactions query...');
+    console.log('📝 Query:', transactionsQuery);
+    console.log('📝 Params:', queryParams);
+    
     const transactionsResult = await getMany(transactionsQuery, queryParams);
+    
+    console.log('📊 Query result:', transactionsResult);
 
     if (!transactionsResult.success) {
+      console.log('❌ Database query failed:', transactionsResult.error);
       return res.status(500).json({
         success: false,
-        message: 'שגיאה בשליפת העסקאות'
+        message: 'שגיאה בשליפת העסקאות',
+        error: transactionsResult.error
       });
     }
 
@@ -208,9 +224,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
     const transactionQuery = `
       SELECT 
         t.*,
-        u.username,
+        u.email,
         u.full_name,
-        u.department,
+        u.monthly_budget,
         c.name as category_name,
         c.color as category_color
       FROM transactions t
@@ -245,8 +261,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Create new transaction
 router.post('/', authenticateToken, upload.single('receipt'), transactionValidation, async (req, res) => {
   try {
+    console.log('🆕 New transaction creation request');
+    console.log('👤 User:', req.user?.id, req.user?.email);
+    console.log('📝 Request body:', req.body);
+    console.log('📎 File uploaded:', !!req.file);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         message: 'שגיאות בנתונים',
@@ -255,6 +277,7 @@ router.post('/', authenticateToken, upload.single('receipt'), transactionValidat
     }
 
     const { amount, description, category_id, transaction_date, store_name } = req.body;
+    console.log('✅ Validation passed, extracted data:', { amount, description, category_id, transaction_date, store_name });
     let receiptPath = null;
     let ocrData = null;
 
@@ -278,7 +301,7 @@ router.post('/', authenticateToken, upload.single('receipt'), transactionValidat
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
     `;
 
-    const insertResult = await execute(insertQuery, [
+    const insertParams = [
       req.user.id,
       amount,
       description,
@@ -287,20 +310,32 @@ router.post('/', authenticateToken, upload.single('receipt'), transactionValidat
       store_name || null,
       receiptPath,
       ocrData ? JSON.stringify(ocrData) : null
-    ]);
+    ];
+    
+    console.log('💾 Executing database insert...');
+    console.log('📝 Query:', insertQuery);
+    console.log('📝 Params:', insertParams);
+    
+    const insertResult = await insert(insertQuery, insertParams);
+    
+    console.log('📊 Insert result:', insertResult);
 
     if (!insertResult.success) {
+      console.log('❌ Database insert failed:', insertResult.error);
       return res.status(500).json({
         success: false,
-        message: 'שגיאה ביצירת העסקה'
+        message: 'שגיאה ביצירת העסקה',
+        error: insertResult.error
       });
     }
+    
+    console.log('✅ Transaction inserted successfully with ID:', insertResult.insertId);
 
     // Get the created transaction with full details
     const newTransaction = await getOne(`
       SELECT 
         t.*,
-        u.username,
+        u.email,
         u.full_name,
         c.name as category_name,
         c.color as category_color
@@ -511,6 +546,110 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Receipt upload endpoint for existing transactions
+router.post('/:id/receipt', authenticateToken, upload.single('receipt'), async (req, res) => {
+  try {
+    const transactionId = req.params.id;
+    
+    // Validate file upload
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No receipt file uploaded'
+      });
+    }
+
+    // Get transaction and verify ownership
+    const transactionResult = await getOne(
+      'SELECT * FROM transactions WHERE id = ? AND (user_id = ? OR ? = "admin")',
+      [transactionId, req.user.id, req.user.role]
+    );
+
+    if (!transactionResult.success || !transactionResult.data) {
+      // Delete uploaded file if transaction not found
+      try {
+        await fs.unlink(req.file.path);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup uploaded file:', cleanupError);
+      }
+      
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found'
+      });
+    }
+
+    const transaction = transactionResult.data;
+    
+    // Delete old receipt file if exists
+    if (transaction.receipt_path) {
+      try {
+        await fs.unlink(transaction.receipt_path);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup old receipt file:', cleanupError);
+      }
+    }
+
+    // Update transaction with new receipt path
+    const updateResult = await execute(
+      'UPDATE transactions SET receipt_path = ?, updated_at = NOW() WHERE id = ?',
+      [req.file.path, transactionId]
+    );
+
+    if (!updateResult.success) {
+      // Delete uploaded file if database update failed
+      try {
+        await fs.unlink(req.file.path);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup uploaded file:', cleanupError);
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update transaction with receipt'
+      });
+    }
+
+    // Log activity
+    await execute(
+      'INSERT INTO activity_log (user_id, action, details) VALUES (?, ?, ?)',
+      [req.user.id, 'RECEIPT_UPLOADED', JSON.stringify({ 
+        transaction_id: transactionId,
+        file_name: req.file.filename,
+        file_size: req.file.size
+      })]
+    );
+
+    res.json({
+      success: true,
+      message: 'Receipt uploaded successfully',
+      data: {
+        transaction_id: transactionId,
+        receipt_path: req.file.path,
+        file_name: req.file.filename
+      }
+    });
+
+  } catch (error) {
+    console.error('Receipt upload error:', error);
+    
+    // Cleanup uploaded file on error
+    if (req.file) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (cleanupError) {
+        console.warn('Failed to cleanup uploaded file:', cleanupError);
+      }
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Receipt upload failed',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
 // OCR endpoint for receipt processing
 router.post('/:id/ocr', authenticateToken, async (req, res) => {
   try {
@@ -662,6 +801,54 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Get transaction stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'שגיאה פנימית בשרת'
+    });
+  }
+});
+
+// Get current user's transactions
+router.get('/my', authenticateToken, async (req, res) => {
+  try {
+    console.log('📊 Getting transactions for user:', req.user.id);
+    
+    const query = `
+      SELECT 
+        t.id,
+        t.amount,
+        t.description,
+        t.transaction_date as date,
+        t.receipt_path,
+        t.status,
+        c.name as category,
+        t.store_name,
+        t.created_at
+      FROM transactions t
+      LEFT JOIN categories c ON t.category_id = c.id
+      WHERE t.user_id = ?
+      ORDER BY t.transaction_date DESC, t.created_at DESC
+    `;
+    
+    const result = await getMany(query, [req.user.id]);
+    
+    if (!result.success) {
+      console.error('❌ Error fetching user transactions:', result.error);
+      return res.status(500).json({
+        success: false,
+        message: 'שגיאה בטעינת העסקאות'
+      });
+    }
+    
+    console.log('✅ Found', result.data.length, 'transactions for user');
+    
+    res.json({
+      success: true,
+      transactions: result.data
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in /my endpoint:', error);
     res.status(500).json({
       success: false,
       message: 'שגיאה פנימית בשרת'

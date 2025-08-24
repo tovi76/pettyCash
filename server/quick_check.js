@@ -39,10 +39,6 @@ async function quickCheck() {
                     await connection.execute('ALTER TABLE users MODIFY COLUMN username VARCHAR(50) NULL DEFAULT NULL');
                     console.log('✅ username תוקן');
                 }
-                if (col.COLUMN_NAME === 'employee_id') {
-                    await connection.execute('ALTER TABLE users MODIFY COLUMN employee_id VARCHAR(20) NULL DEFAULT NULL');
-                    console.log('✅ employee_id תוקן');
-                }
                 if (col.COLUMN_NAME === 'department') {
                     await connection.execute('ALTER TABLE users MODIFY COLUMN department VARCHAR(50) NULL DEFAULT NULL');
                     console.log('✅ department תוקן');

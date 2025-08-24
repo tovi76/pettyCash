@@ -13,7 +13,6 @@ CREATE TABLE users (
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
-    employee_id VARCHAR(20) UNIQUE NOT NULL,
     department VARCHAR(50) NOT NULL,
     role ENUM('admin', 'client') DEFAULT 'client',
     is_active BOOLEAN DEFAULT TRUE,
@@ -23,7 +22,6 @@ CREATE TABLE users (
     
     INDEX idx_username (username),
     INDEX idx_email (email),
-    INDEX idx_employee_id (employee_id),
     INDEX idx_department (department),
     INDEX idx_role (role),
     INDEX idx_active (is_active)
@@ -154,8 +152,8 @@ CREATE TABLE activity_log (
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- Insert default admin user (password: admin123)
-INSERT INTO users (username, email, password_hash, full_name, employee_id, department, role) VALUES 
-('admin', 'admin@company.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsxq5S/kS', 'System Administrator', 'EMP001', 'Management', 'admin');
+INSERT INTO users (username, email, password_hash, full_name,  department, role) VALUES 
+('admin', 'admin@company.com', '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsxq5S/kS', 'System Administrator', 'Management', 'admin');
 
 -- Insert default categories
 INSERT INTO categories (name, description, color, budget_limit) VALUES 
@@ -198,9 +196,8 @@ SELECT
     t.created_at,
     t.updated_at,
     u.username,
-    u.full_name as user_name,
+    u.full_name,
     u.department,
-    u.employee_id,
     c.name as category_name,
     c.color as category_color,
     c.budget_limit as category_budget,
@@ -236,7 +233,6 @@ SELECT
     u.username,
     u.full_name,
     u.department,
-    u.employee_id,
     COUNT(t.id) as total_transactions,
     SUM(CASE WHEN t.status = 'approved' THEN t.amount ELSE 0 END) as total_approved,
     SUM(CASE WHEN t.status = 'pending' THEN t.amount ELSE 0 END) as total_pending,

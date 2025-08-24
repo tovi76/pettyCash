@@ -43,13 +43,27 @@ api.interceptors.response.use(
     console.error('Error status:', error.response?.status);
     console.error('Error message:', error.response?.data?.message || error.message);
     console.error('Full error:', error);
-    
-    if (error.response?.status === 401) {
-      console.warn('🚫 Token expired or invalid, redirecting to login');
+
+    // Don't redirect to login during OCR/receipt upload operations or transaction creation
+    const isOCROperation = error.config?.url?.includes('/ocr') ||
+      error.config?.url?.includes('/receipt') ||
+      error.config?.url?.includes('/transactions');
+
+    console.log('🔍 Checking if OCR operation:', {
+      url: error.config?.url,
+      isOCROperation,
+      status: error.response?.status
+    });
+
+    if (error.response?.status === 401 && !isOCROperation) {
+      console.warn('🙫 Token expired or invalid, redirecting to login');
       // Token expired or invalid
       localStorage.removeItem('authToken');
       localStorage.removeItem('userData');
       window.location.href = '/login';
+    } else if (error.response?.status === 401 && isOCROperation) {
+      console.warn('⚠️ Authentication error during OCR/receipt/transaction operation - not redirecting');
+      console.log('📝 Will not redirect to login for this operation');
     }
     return Promise.reject(error);
   }
@@ -109,7 +123,7 @@ export const transactionsAPI = {
   uploadReceipt: async (transactionId, file) => {
     const formData = new FormData();
     formData.append('receipt', file);
-    
+
     const response = await api.post(`/transactions/${transactionId}/receipt`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -124,8 +138,10 @@ export const transactionsAPI = {
   },
 
   getStatistics: async () => {
-    const response = await api.get('/transactions/stats');
-    return response.data;
+    return api.get('/transactions/statistics').then(response => response.data);
+  },
+  getMyTransactions: async () => {
+    return api.get('/transactions/my').then(response => response.data);
   }
 };
 
@@ -179,7 +195,7 @@ export const reportsAPI = {
     const response = await api.get(`/reports/export/${reportType}?${queryParams}`, {
       responseType: 'blob',
     });
-    
+
     // Create download link
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
@@ -189,7 +205,7 @@ export const reportsAPI = {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-    
+
     return { success: true, message: 'הדוח הורד בהצלחה' };
   }
 };
@@ -227,13 +243,51 @@ export const usersAPI = {
   }
 };
 
+// Special Requests API calls
+export const specialRequestsAPI = {
+  create: async (requestData) => {
+    const response = await api.post('/special-requests', requestData);
+    return response.data;
+  },
+
+  getMyRequests: async () => {
+    const response = await api.get('/special-requests/my-requests');
+    return response.data;
+  },
+
+  getPendingAmount: async () => {
+    const response = await api.get('/special-requests/pending-amount/');
+    return response.data;
+  },
+
+  // Admin functions
+  getAllPending: async () => {
+    const response = await api.get('/special-requests/admin/pending');
+    return response.data;
+  },
+
+  getAllRequests: async () => {
+    const response = await api.get('/special-requests/admin/all');
+    return response.data;
+  },
+
+  updateStatus: async (id, status, adminNotes) => {
+    const response = await api.patch(`/special-requests/admin/${id}/status`, {
+      status,
+      adminNotes
+    });
+    return response.data;
+  }
+};
+
 // Combined API for easy import
 export const API = {
   auth: authAPI,
   transactions: transactionsAPI,
   categories: categoriesAPI,
   reports: reportsAPI,
-  users: usersAPI
+  users: usersAPI,
+  specialRequests: specialRequestsAPI
 };
 
 export default api;

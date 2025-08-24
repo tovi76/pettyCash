@@ -255,7 +255,7 @@ class OCRService {
     if (/שמפו|סבון|משחת|תרופה|ויטמין/.test(itemText)) {
       return 'בריאות וטיפוח';
     }
-    if (/דלק|בנזין|נסיעה|כרטיס/.test(itemText)) {
+    if (/דלק|בנזין|קילומטר|נסיעה|כרטיס/.test(itemText)) {
       return 'תחבורה';
     }
 

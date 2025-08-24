@@ -94,12 +94,12 @@ router.post('/register', registerLimiter, registerValidation, async (req, res) =
       });
     }
 
-    const { username, email, password, fullName, department, employeeId } = req.body;
+    const { username, email, password, fullName, department } = req.body;
 
     // Check if user already exists
     const existingUser = await getOne(
-      'SELECT id FROM users WHERE username = ? OR email = ? OR employee_id = ?',
-      [username, email, employeeId]
+      'SELECT id FROM users WHERE username = ? OR email = ? ',
+      [username, email]
     );
 
     if (existingUser.success && existingUser.data) {
@@ -115,9 +115,9 @@ router.post('/register', registerLimiter, registerValidation, async (req, res) =
 
     // Insert new user
     const insertResult = await execute(
-      `INSERT INTO users (username, email, password_hash, full_name, department, employee_id, role, is_active, created_at)
+      `INSERT INTO users (username, email, password_hash, full_name, department,  role, is_active, created_at)
        VALUES (?, ?, ?, ?, ?, ?, 'client', true, NOW())`,
-      [username, email, hashedPassword, fullName, department, employeeId]
+      [username, email, hashedPassword, fullName, department]
     );
 
     if (!insertResult.success) {
@@ -130,7 +130,7 @@ router.post('/register', registerLimiter, registerValidation, async (req, res) =
 
     // Get the created user
     const newUser = await getOne(
-      'SELECT id, username, email, full_name, department, employee_id, role FROM users WHERE id = ?',
+      'SELECT id, username, email, full_name, department, role FROM users WHERE id = ?',
       [insertResult.insertId]
     );
 
@@ -154,7 +154,6 @@ router.post('/register', registerLimiter, registerValidation, async (req, res) =
           email: newUser.data.email,
           fullName: newUser.data.full_name,
           department: newUser.data.department,
-          employeeId: newUser.data.employee_id,
           role: newUser.data.role
         },
         token
@@ -196,7 +195,6 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
         email: 'admin@company.com',
         full_name: 'System Administrator',
         department: 'Management',
-        employee_id: 'EMP001',
         role: 'admin',
         is_active: true
       };
@@ -215,7 +213,6 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
             fullName: demoUser.full_name,
             role: demoUser.role,
             department: demoUser.department,
-            employeeId: demoUser.employee_id
           }
         }
       });
@@ -228,7 +225,6 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
         email: 'user@company.com',
         full_name: 'Demo User',
         department: 'Sales',
-        employee_id: 'EMP002',
         role: 'client',
         is_active: true
       };
@@ -247,7 +243,6 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
             fullName: demoUser.full_name,
             role: demoUser.role,
             department: demoUser.department,
-            employeeId: demoUser.employee_id
           }
         }
       });
@@ -257,7 +252,7 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
     let userResult;
     try {
       userResult = await getOne(
-        'SELECT id, username, email, password_hash, full_name, department, employee_id, role, is_active, last_login FROM users WHERE username = ? OR email = ?',
+        'SELECT id, username, email, password_hash, full_name, department,  role, is_active, last_login FROM users WHERE username = ? OR email = ?',
         [username, username]
       );
 
@@ -296,10 +291,10 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
     }
 
     // Update last login
-    await execute(
-      'UPDATE users SET last_login = NOW() WHERE id = ?',
-      [user.id]
-    );
+    // await execute(
+    //   'UPDATE users SET last_login = NOW() WHERE id = ?',
+    //   [user.id]
+    // );
 
     // Generate token
     const token = generateToken(user);
@@ -314,7 +309,6 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
           email: user.email,
           fullName: user.full_name,
           department: user.department,
-          employeeId: user.employee_id,
           role: user.role,
           lastLogin: user.last_login
         },
@@ -335,7 +329,7 @@ router.post('/login', authLimiter, loginValidation, async (req, res) => {
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const userResult = await getOne(
-      'SELECT id, username, email, full_name, department, employee_id, role, is_active, created_at, last_login FROM users WHERE id = ?',
+      'SELECT id, email, full_name, monthly_budget, role, is_active, created_at FROM users WHERE id = ?',
       [req.user.id]
     );
 
@@ -352,15 +346,12 @@ router.get('/profile', authenticateToken, async (req, res) => {
       success: true,
       data: {
         id: user.id,
-        username: user.username,
         email: user.email,
-        fullName: user.full_name,
-        department: user.department,
-        employeeId: user.employee_id,
+        full_name: user.full_name,
+        monthly_budget: user.monthly_budget,
         role: user.role,
-        isActive: user.is_active,
-        createdAt: user.created_at,
-        lastLogin: user.last_login
+        is_active: user.is_active,
+        created_at: user.created_at
       }
     });
 

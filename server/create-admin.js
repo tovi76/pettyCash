@@ -26,7 +26,6 @@ async function createAdminUser() {
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
                 full_name VARCHAR(100) NOT NULL,
-                employee_id VARCHAR(20) UNIQUE NOT NULL,
                 department VARCHAR(50) NOT NULL,
                 role ENUM('admin', 'client') DEFAULT 'client',
                 is_active BOOLEAN DEFAULT TRUE,
@@ -56,14 +55,13 @@ async function createAdminUser() {
 
         // Create admin user
         await connection.execute(`
-            INSERT INTO users (username, email, password_hash, full_name, employee_id, department, role, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, email, password_hash, full_name,  department, role, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [
             'admin',
             'admin@company.com',
             hashedPassword,
             'System Administrator',
-            'ADMIN001',
             'IT',
             'admin',
             true
@@ -79,14 +77,13 @@ async function createAdminUser() {
         const hashedClientPassword = await bcrypt.hash(clientPassword, saltRounds);
 
         await connection.execute(`
-            INSERT INTO users (username, email, password_hash, full_name, employee_id, department, role, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, email, password_hash, full_name, department, role, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [
             'user',
             'user@company.com',
             hashedClientPassword,
             'Demo User',
-            'EMP001',
             'Sales',
             'client',
             true

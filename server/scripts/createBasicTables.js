@@ -38,7 +38,6 @@ async function createBasicTables() {
         email VARCHAR(100) UNIQUE NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         full_name VARCHAR(100) NOT NULL,
-        employee_id VARCHAR(20) UNIQUE NOT NULL,
         department VARCHAR(50) NOT NULL,
         role ENUM('admin', 'client') DEFAULT 'client',
         is_active BOOLEAN DEFAULT TRUE,
@@ -48,7 +47,6 @@ async function createBasicTables() {
         
         INDEX idx_username (username),
         INDEX idx_email (email),
-        INDEX idx_employee_id (employee_id),
         INDEX idx_department (department),
         INDEX idx_role (role),
         INDEX idx_active (is_active)
@@ -133,8 +131,8 @@ async function createBasicTables() {
     // הוספת משתמש admin ברירת מחדל
     const adminPassword = '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj6hsxq5S/kS'; // admin123
     await connection.execute(`
-      INSERT IGNORE INTO users (username, email, password_hash, full_name, employee_id, department, role) 
-      VALUES ('admin', 'admin@company.com', ?, 'System Administrator', 'EMP001', 'Management', 'admin')
+      INSERT IGNORE INTO users (username, email, password_hash, full_name,  department, role) 
+      VALUES ('admin', 'admin@company.com', ?, 'System Administrator', 'Management', 'admin')
     `, [adminPassword]);
     console.log('✅ משתמש admin נוצר');
     

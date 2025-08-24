@@ -57,7 +57,6 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
                 username,
                 email,
                 full_name,
-                employee_id,
                 department,
                 role,
                 is_active,
@@ -100,17 +99,28 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
 router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     try {
         console.log('📝 Create user request received:', req.body);
-        const { email, password, full_name, monthly_budget = 0 } = req.body;
+        const { email, password, username, full_name, department, monthly_budget = 0 } = req.body;
         
         // Validate required fields
         console.log('🔍 Validating required fields...');
-        if (!email || !password || !full_name || monthly_budget <= 0) {
+        console.log('Fields check:', {
+            email: !!email,
+            password: !!password,
+            username: !!username,
+            full_name: !!full_name,
+            department: !!department,
+            monthly_budget: monthly_budget > 0
+        });
+        
+        if (!email || !password || !username || !full_name || !department || monthly_budget <= 0) {
             console.log('❌ Validation failed - missing required fields');
             return res.status(400).json({
                 success: false,
                 message: 'כל השדות הנדרשים חייבים להיות מלאים'
             });
         }
+        
+        console.log('✅ All required fields present');
         console.log('✅ All required fields present');
         
         
@@ -137,43 +147,56 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         }
         
         // Hash password
+        console.log('🔐 Hashing password...');
         const saltRounds = 10;
         const password_hash = await bcrypt.hash(password, saltRounds);
+        console.log('✅ Password hashed successfully');
         
         // Insert new user
+        console.log('💾 Inserting new user into database...');
         const insertQuery = `
-            INSERT INTO users (email, password_hash, full_name, monthly_budget, is_active)
-            VALUES (?, ?, ?, ?, TRUE)
+            INSERT INTO users (email, password_hash, username, full_name, department, monthly_budget, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, TRUE)
         `;
         
+        console.log('Insert query:', insertQuery);
+        console.log('Insert params:', [email, '[HIDDEN]', username, full_name, department, monthly_budget]);
+        
         const insertResult = await executeQuery(insertQuery, [
-            email, password_hash, full_name, monthly_budget
+            email, password_hash, username, full_name, department, monthly_budget
         ]);
+        
         if (!insertResult.success) {
+            console.error('❌ Error inserting user:', insertResult.error);
             throw new Error(insertResult.error);
         }
         
+        console.log('✅ User inserted successfully, ID:', insertResult.data.insertId);
+        
         // Get the created user
         const newUserResult = await getOne(
-            'SELECT id, email, full_name, monthly_budget, is_active, created_at FROM users WHERE id = ?',
+            'SELECT id, email, username, full_name, department, monthly_budget, is_active, created_at FROM users WHERE id = ?',
             [insertResult.data.insertId]
         );
         if (!newUserResult.success) {
+            console.error('❌ Error fetching created user:', newUserResult.error);
             throw new Error('Failed to fetch created user');
         }
         
         console.log('✅ User created successfully:', newUserResult.data);
+        
         res.status(201).json({
             success: true,
             message: 'משתמש נוצר בהצלחה',
             data: newUserResult.data
         });
     } catch (error) {
-        console.error('❌ Error creating user:', error);
+        console.error('❌ Unexpected error in user creation:', error);
         console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
-            message: 'שגיאה ביצירת המשתמש'
+            message: 'שגיאה ביצירת המשתמש',
+            error: error.message
         });
     }
 });
@@ -182,7 +205,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { email, full_name, monthly_budget, is_active, password } = req.body;
+        const { email, username,full_name, monthly_budget, is_active, password } = req.body;
         
         // Check if user exists
         const existingUserResult = await getOne('SELECT id FROM users WHERE id = ?', [id]);
@@ -216,10 +239,10 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
         // Update user
         let updateQuery = `
             UPDATE users 
-            SET email = ?, full_name = ?, monthly_budget = ?, is_active = ?
+            SET username = ?, email = ?, full_name = ?, monthly_budget = ?, is_active = ?
             WHERE id = ?
         `;
-        let updateParams = [email, full_name, monthly_budget, is_active, id];
+        let updateParams = [username, email, full_name, monthly_budget, is_active, id];
         
         // If password is provided, include it in the update
         if (password && password.trim() !== '') {

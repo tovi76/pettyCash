@@ -13,7 +13,7 @@ UPDATE users SET monthly_budget = 1000.00 WHERE monthly_budget = 0.00 OR monthly
 -- Note: We're keeping the old columns for now to avoid data loss
 -- In production, you might want to drop them after ensuring data migration is complete:
 -- ALTER TABLE users DROP COLUMN username;
--- ALTER TABLE users DROP COLUMN employee_id; 
+ ALTER TABLE users DROP COLUMN employee_id; 
 -- ALTER TABLE users DROP COLUMN department;
 -- ALTER TABLE users DROP COLUMN role;
 -- ALTER TABLE users DROP COLUMN last_login;

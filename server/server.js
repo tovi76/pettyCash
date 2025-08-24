@@ -13,6 +13,7 @@ const fundRoutes = require('./routes/funds');
 const transactionRoutes = require('./routes/transactions');
 const categoryRoutes = require('./routes/categories');
 const reportRoutes = require('./routes/reports');
+const specialRequestRoutes = require('./routes/specialRequests');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -54,6 +55,7 @@ app.use('/api/funds', fundRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/special-requests', specialRequestRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

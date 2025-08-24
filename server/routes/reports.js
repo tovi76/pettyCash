@@ -18,7 +18,7 @@ const calculateOptimalAllocation = async (startDate, endDate) => {
         u.id,
         u.full_name,
         u.department,
-        u.employee_id,
+        u.username,
         COUNT(t.id) as transaction_count,
         COALESCE(SUM(CASE WHEN t.status = 'approved' THEN t.amount ELSE 0 END), 0) as approved_amount,
         COALESCE(SUM(CASE WHEN t.status = 'pending' THEN t.amount ELSE 0 END), 0) as pending_amount,
@@ -50,6 +50,7 @@ const calculateOptimalAllocation = async (startDate, endDate) => {
       
       return {
         user_id: user.id,
+        username: user.username,
         full_name: user.full_name,
         department: user.department,
         current_allocation: currentAllocation,
@@ -164,7 +165,7 @@ router.get('/monthly', authenticateToken, [
       SELECT 
         u.full_name,
         u.department,
-        u.employee_id,
+        u.username,
         COUNT(t.id) as transaction_count,
         SUM(CASE WHEN t.status = 'approved' THEN t.amount ELSE 0 END) as approved_amount,
         SUM(CASE WHEN t.status = 'pending' THEN t.amount ELSE 0 END) as pending_amount
@@ -279,9 +280,9 @@ router.get('/export/monthly', authenticateToken, requireRole('admin'), [
         t.store_name,
         t.status,
         t.created_at,
-        u.full_name as user_name,
+        u.full_name,
+        u.username,
         u.department,
-        u.employee_id,
         c.name as category_name
       FROM transactions t
       LEFT JOIN users u ON t.user_id = u.id
@@ -331,9 +332,8 @@ router.get('/export/monthly', authenticateToken, requireRole('admin'), [
       const row = transactionsSheet.addRow([
         transaction.id,
         new Date(transaction.transaction_date),
-        transaction.user_name,
+        transaction.full_name,
         transaction.department,
-        transaction.employee_id,
         transaction.category_name,
         transaction.description,
         transaction.store_name || '',
